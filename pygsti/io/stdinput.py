@@ -958,7 +958,14 @@ def parse_model(filename):
     else:
         # otherwise we'll try to infer one from state space labels
         if state_space_labels is not None:
-            basis = _objs.Basis.cast(basis_abbrev, state_space_labels.dim)
+            if '*' in basis_abbrev:
+                names = basis_abbrev.split('*')
+                if all([n == names[0] for n in names]):
+                    basis = _objs.Basis.cast(names[0], state_space_labels)
+                else:
+                    raise ValueError('Cannot reconstruct TensorProdBasis with mixed component basis types: ' + str(basis_abbrev))
+            else:
+                basis = _objs.Basis.cast(basis_abbrev, state_space_labels.dim)
         else:
             raise ValueError("Cannot infer basis dimension!")
 
@@ -1012,8 +1019,18 @@ def parse_model(filename):
 
                 elif len(parts) >= 2:  # then this is a '<type>: <label>' line => new cur_obj
                     typ = parts[0].strip()
-                    label = _objs.Label(name=parts[1].strip() if parts[1].strip() != "[]" else (),
-                                        state_space_labels=tuple(map(to_int, parts[2:])) if len(parts) > 2 else None)
+                    label_key = ':'.join([p.strip() for p in parts[1:]])
+                    if ':' in label_key or '[' in label_key:
+                        # Process as a circuit layer label
+                        c = _objs.Circuit(label_key)
+                        assert len(c) == 1, "Invalid circuit layer label: " + str(label_key)
+                        label = c.layertup[0]
+                    else:
+                        # Process as simple string (e.g. EFFECT labels)
+                        label = _objs.Label(name=parts[1].strip())
+                        #label = _objs.Label(name=parts[1].strip() if parts[1].strip() != "[]" else (),
+                        #                    state_space_labels=tuple(map(to_int, parts[2:])) if len(parts) > 2 else None)
+
 
                     # place any existing cur_obj
                     if cur_obj is not None:

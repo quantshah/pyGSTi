@@ -310,9 +310,9 @@ def write_model(model, filename, title=None):
         if isinstance(val, _np.ndarray):  # then write as rows
             f.write("%s\n" % lbl)
             if val.ndim == 1:
-                f.write(" ".join("%.8g" % el for el in val) + '\n')
+                f.write(" ".join("%.14g" % el for el in val) + '\n')
             elif val.ndim == 2:
-                f.write(_tools.mx_to_string(val, width=16, prec=8))
+                f.write(_tools.mx_to_string(val, width=22, prec=14))
             else:
                 raise ValueError("Cannot write an ndarray with %d dimensions!" % val.ndim)
             f.write("\n")
