@@ -1169,8 +1169,8 @@ def create_crosstalk_free_model(num_qubits, gate_names, nonstd_gate_unitaries={}
     Model
         A model with `"rho0"` prep, `"Mdefault"` POVM, and gates labeled by
         gate name (keys of `gatedict`) and qubit labels (from within
-        `availability`).  For instance, the operation label for the `"Gx"` gate on
-        qubit 2 might be `Label("Gx",1)`.
+        `availability`).  For instance, the operation label for the `"Gx"`
+        gate on qubit 2 might be `Label("Gx",1)`.
     """
     if evotype == "auto":
         evotype = "densitymx"  # FUTURE: do something more sophisticated?
