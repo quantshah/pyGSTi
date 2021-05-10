@@ -11,6 +11,7 @@ Defines classes which represent gates, as well as supporting functions
 #***************************************************************************************************
 
 import numpy as _np
+from numpy.random import RandomState as _RandomState
 import scipy.linalg as _spl
 import scipy.sparse as _sps
 import scipy.sparse.linalg as _spsl
@@ -22,6 +23,7 @@ import collections as _collections
 import numbers as _numbers
 
 from .. import optimize as _opt
+from ..tools import internalgates as _igts
 from ..tools import matrixtools as _mt
 from ..tools import optools as _gt
 from ..tools import jamiolkowski as _jt
@@ -1196,6 +1198,41 @@ class LinearOperator(_modelmember.ModelMember):
 
         return matrix
 
+    def get_chp_str(self, targets=None):
+        """Return a string suitable for printing to a CHP input file after
+        probabilistically selecting operation.
+
+        Parameters
+        ----------
+        targets: list of int, optional
+            Qubits to be applied to (if None, uses stored CHP strings directly)
+
+        Returns
+        -------
+        s : str
+            String of CHP code
+        """
+        assert (self._evotype == 'chp'), 'Only "chp" evotype can use get_chp_str'
+
+        ops = self._rep.chp_ops
+        nqubits = self._rep.nqubits
+
+        if targets is not None:
+            assert len(targets) == nqubits, "Got {0} targets instead of required {1}".format(len(targets), nqubits)
+            target_map = {str(i): str(t) for i, t in enumerate(targets)}
+
+        s = ""
+        for op in ops:
+            # Substitute if alternate targets provided
+            if targets is not None:
+                op_str = ''.join([target_map[c] if c in target_map else c for c in op])
+            else:
+                op_str = op
+
+            s += op_str + '\n'
+
+        return s
+
 
 #class MapOperator(LinearOperator):
 #    def __init__(self, dim, evotype):
@@ -1418,6 +1455,7 @@ class StaticStandardOp(DenseOperator):
         - "statevec": Unitary from standard_gatename_unitaries is used directly
         - "densitymx", "svterm", "cterm": Pauli transfer matrix is built from standard_gatename_unitaries
           (i.e. basis = 'pp')
+        - "chp": CHP compilation taken from standard_gatenames_chp_conversions
     """
     def __init__(self, name, evotype):
         self.name = name
@@ -1425,7 +1463,7 @@ class StaticStandardOp(DenseOperator):
         if evotype in ('statevec', 'densitymx', 'svterm', 'cterm'):
             std_unitaries = _itgs.standard_gatename_unitaries()
             if self.name not in std_unitaries:
-                raise ValueError("Name %s not in standard unitaries" % self.name)
+                raise ValueError("Name '%s' not in standard unitaries" % self.name)
 
             U = std_unitaries[self.name]
 
@@ -1434,13 +1472,38 @@ class StaticStandardOp(DenseOperator):
             else:  # evotype in ('densitymx', 'svterm', 'cterm')
                 ptm = _gt.unitary_to_pauligate(U)
                 rep = replib.DMOpRepDense(LinearOperator.convert_to_matrix(ptm))
+        elif evotype == 'chp':
+            std_chp_ops = _itgs.standard_gatenames_chp_conversions()
+            if self.name not in std_chp_ops:
+                raise ValueError("Name '%s' not in standard CHP operations" % self.name)
+
+            native_ops = std_chp_ops[self.name]
+            nqubits = 2 if any(['c' in n for n in native_ops]) else 1
+
+            rep = replib.CHPOpRep(native_ops, nqubits)
         else:
             raise ValueError("Invalid evotype for a StaticStandardOp: %s" % evotype)
 
         LinearOperator.__init__(self, rep, evotype)
 
+    # TODO: This should not be necessary to define, but is here as a temporary measure
+    # This will likely be removed as "dense" is reworked in the evotype refactor
+    @property
+    def base(self):
+        """
+        The underlying dense process matrix.
+        """
+        if self._evotype in ['statevec', 'densitymx', 'svterm', 'cterm']:
+            return self._rep.base
+        else:
+            raise NotImplementedError('No base available for evotype "%s"' % self._evotype)
+
     def __str__(self):
         s = "%s with name %s and evotype %s\n" % (self.__class__.__name__, self.name, self._evotype)
+        if self._evotype in ['statevec', 'densitymx', 'svterm', 'cterm']:
+            s += _mt.mx_to_string(self.base, width=4, prec=2)
+        elif self._evotype == 'chp':
+            s += 'CHP operations: ' + ','.join(self._rep.chp_ops) + '\n'
         return s
 
 
@@ -1544,6 +1607,15 @@ class FullDenseOp(DenseOperator):
         assert(evotype in ("statevec", "densitymx")), \
             "Invalid evolution type '%s' for %s" % (evotype, self.__class__.__name__)
         DenseOperator.__init__(self, m, evotype)
+
+        d = self.dim
+        if self._evotype == "statevec":
+            self._paramlbls = _np.array(["MxElement Re(%d,%d)" % (i, j) for i in range(d) for j in range(d)]
+                                        + ["MxElement Im(%d,%d)" % (i, j) for i in range(d) for j in range(d)],
+                                        dtype=object)
+        else:
+            self._paramlbls = _np.array(["MxElement %d,%d" % (i, j) for i in range(d) for j in range(d)],
+                                        dtype=object)
 
     def set_dense(self, m):
         """
@@ -1715,6 +1787,8 @@ class TPDenseOp(DenseOperator):
         DenseOperator.__init__(self, raw, "densitymx")
         assert(self._rep.base.flags['C_CONTIGUOUS'] and self._rep.base.flags['OWNDATA'])
         assert(isinstance(self.base, _ProtectedArray))
+        self._paramlbls = _np.array(["MxElement %d,%d" % (i, j) for i in range(1, self.dim) for j in range(self.dim)],
+                                    dtype=object)
 
     @property
     def base(self):
@@ -2371,6 +2445,7 @@ class EigenvalueParamDenseOp(DenseOperator):
         #Build a list of parameter descriptors.  Each element of self.params
         # is a list of (prefactor, (i,j)) tuples.
         self.params = []
+        paramlbls = []
         i = 0; N = len(self.evals); processed = [False] * N
         while i < N:
             if processed[i]:
@@ -2428,6 +2503,7 @@ class EigenvalueParamDenseOp(DenseOperator):
                     if tp_constrained_and_unital and k == 0: continue
                     prefactor = 1.0; mx_indx = (k, k)
                     self.params.append([(prefactor, mx_indx)])
+                    paramlbls.append("Real eigenvalue %d" % k)
                     processed[k] = True
             else:
                 iConjugate = {}
@@ -2448,6 +2524,8 @@ class EigenvalueParamDenseOp(DenseOperator):
                             self.params.append([  # imag-part param
                                 (1j, (k, k)),  # (prefactor, index)
                                 (-1j, (l, l))])
+                            paramlbls.append("Eigenvalue-pair (%d,%d) Re-part" % (k, l))
+                            paramlbls.append("Eigenvalue-pair (%d,%d) Im-part" % (k, l))
                             processed[k] = processed[l] = True
                             iConjugate[k] = l  # save conj. pair index for below
                             break
@@ -2471,10 +2549,12 @@ class EigenvalueParamDenseOp(DenseOperator):
                             # k1,k2 element
                             if not tp_constrained_and_unital or k1 != 0:
                                 self.params.append([(1.0, (k1, k2))])
+                                paramlbls.append("Off-diag (%d,%d) of real eigval block" % (k1, k2))
 
                             # k2,k1 element
                             if not tp_constrained_and_unital or k2 != 0:
                                 self.params.append([(1.0, (k2, k1))])
+                                paramlbls.append("Off-diag (%d,%d) of real eigval block" % (k2, k1))
                         else:
                             k1c, k2c = iConjugate[k1], iConjugate[k2]
 
@@ -2485,6 +2565,10 @@ class EigenvalueParamDenseOp(DenseOperator):
                             self.params.append([  # imag-part param
                                 (1j, (k1, k2)),
                                 (-1j, (k1c, k2c))])
+                            paramlbls.append("Off-diags (%d,%d), (%d,%d) Re-part for eigval-pair blocks" % (
+                                k1, k2, k1c, k2c))
+                            paramlbls.append("Off-diags (%d,%d), (%d,%d) Im-part for eigval-pair blocks" % (
+                                k1, k2, k1c, k2c))
 
                             # k2,k1 element
                             self.params.append([  # real-part param
@@ -2493,6 +2577,10 @@ class EigenvalueParamDenseOp(DenseOperator):
                             self.params.append([  # imag-part param
                                 (1j, (k2, k1)),
                                 (-1j, (k2c, k1c))])
+                            paramlbls.append("Off-diags (%d,%d), (%d,%d) Re-part for eigval-pair blocks" % (
+                                k2, k1, k2c, k1c))
+                            paramlbls.append("Off-diags (%d,%d), (%d,%d) Im-part for eigval-pair blocks" % (
+                                k2, k1, k2c, k1c))
 
             i = j  # advance to next block
 
@@ -2504,6 +2592,9 @@ class EigenvalueParamDenseOp(DenseOperator):
         DenseOperator.__init__(self, mx, "densitymx")
         self.base.flags.writeable = False  # only _construct_matrix can change array
         self._construct_matrix()  # construct base from the parameters
+
+        #Set parameter labels
+        self._paramlbls = _np.array(paramlbls, dtype=object)
 
     def _construct_matrix(self):
         """
@@ -2639,10 +2730,14 @@ class StochasticNoiseOp(LinearOperator):
     `rho -> (1-sum(p_i))rho + sum_(i>0) p_i * B_i * rho * B_i^dagger`
     where `p_i > 0` and `sum(p_i) < 1`, and `B_i` is basis where `B_0` is the identity.
 
+    In the case of the 'chp' evotype, the `B_i` element is returned with
+    probability `p_i`, such that the outcome distribution matches the aforementioned
+    stochastic noise map when considered over many samples.
+
     Parameters
     ----------
     dim : int
-        The dimension of this operator (4 for a single qubit).
+        The basis dimension of this operator (4 for a single qubit).
 
     basis : Basis or {'pp','gm','qt'}, optional
         The basis to use, defining the "principle axes"
@@ -2653,14 +2748,18 @@ class StochasticNoiseOp(LinearOperator):
         the evolution type being used.
 
     initial_rates : list or array
-        if not None, a list of `dim-1` initial error rates along each of
+        if not None, a list of `basis.size-1` initial error rates along each of
         the directions corresponding to each basis element.  If None,
         then all initial rates are zero.
+
+    seed_or_state : float or RandomState, optional
+        Random seed for RandomState (or directly provided RandomState)
+        for sampling stochastic superoperators with the 'chp' evotype.
     """
     # Difficult to parameterize and maintain the p_i conditions - Initially just store positive p_i's
     # and don't bother restricting their sum to be < 1?
 
-    def __init__(self, dim, basis="pp", evotype="densitymx", initial_rates=None):
+    def __init__(self, dim, basis="pp", evotype="densitymx", initial_rates=None, seed_or_state=None):
         """
         Create a new StochasticNoiseOp, representing a stochastic noise
         channel with possibly asymmetric noise but only noise that is
@@ -2669,51 +2768,89 @@ class StochasticNoiseOp(LinearOperator):
         Parameters
         ----------
         dim : int
-            The dimension of this operator (4 for a single qubit).
+            The basis dimension of this operator (4 for a single qubit).
 
         basis : Basis or {'pp','gm','qt'}, optional
             The basis to use, defining the "principle axes"
             along which there is stochastic noise.  We assume that
             the first element of `basis` is the identity.
+            This must be 'pp' for the 'chp' evotype.
 
-        evotype : {"densitymx", "cterm", "svterm"}
+        evotype : {"densitymx", "cterm", "svterm", "chp"}
             the evolution type being used.
 
         initial_rates : list or array
             if not None, a list of `dim-1` initial error rates along each of
             the directions corresponding to each basis element.  If None,
             then all initial rates are zero.
-        """
-        self.basis = _Basis.cast(basis, dim, sparse=False)  # sparse??
-        assert(dim == self.basis.dim), "Dimension of `basis` must match the dimension (`dim`) of this op."
 
-        self.stochastic_superops = []
-        for b in self.basis.elements[1:]:
-            std_superop = _lbt.nonham_lindbladian(b, b, sparse=False)
-            self.stochastic_superops.append(_bt.change_basis(std_superop, 'std', self.basis))
+        seed_or_state : float or RandomState, optional
+            Random seed for RandomState (or directly provided RandomState)
+            for sampling stochastic superoperators with the 'chp' evotype.
+        """
+        if isinstance(seed_or_state, _RandomState):
+            self.rand_state = seed_or_state
+        else:
+            self.rand_state = _RandomState(seed_or_state)
+
+        if evotype in ['densitymx', 'cterm', 'svterm']:
+            self.basis = _Basis.cast(basis, dim, sparse=False)  # sparse??
+            assert(dim == self.basis.dim), "Dimension of `basis` must match the dimension (`dim`) of this op."
+
+            self.stochastic_superops = []
+            for b in self.basis.elements[1:]:
+                std_superop = _lbt.nonham_lindbladian(b, b, sparse=False)
+                self.stochastic_superops.append(_bt.change_basis(std_superop, 'std', self.basis))
+        elif evotype == 'chp':
+            assert (basis == 'pp'), "Only Pauli basis is allowed for 'chp' evotype"
+            nqubits = (dim - 1).bit_length()
+
+            self.basis = _Basis.cast(basis, 4**nqubits, sparse=False)
+
+            std_chp_ops = _itgs.standard_gatenames_chp_conversions()
+
+            # For CHP, need to make a Composed + EmbeddedOp for the super operators
+            # For lower overhead, make this directly using the rep instead of with objects
+            self.stochastic_superops = []
+            for label in self.basis.labels[1:]:
+                combined_chp_ops = []
+
+                for i, pauli in enumerate(label):
+                    name = 'Gi' if pauli == "I" else 'G%spi' % pauli.lower()
+                    chp_op = std_chp_ops[name]
+                    chp_op_targeted = [op.replace('0', str(i)) for op in chp_op]
+                    combined_chp_ops.extend(chp_op_targeted)
+
+                rep = replib.CHPOpRep(combined_chp_ops, nqubits)
+                self.stochastic_superops.append(LinearOperator(rep, 'chp'))
+        else:
+            raise NotImplementedError('Evotype "%s" not available with StochasticNoiseOp' % evotype)
 
         #Setup initial parameters
         self.params = _np.zeros(self.basis.size - 1, 'd')  # note that basis.dim can be < self.dim (OK)
         if initial_rates is not None:
             assert(len(initial_rates) == self.basis.size - 1), \
-                "Expected %d initial rates but got %d!" % (len(initial_rates), self.basis.size - 1)
+                "Expected %d initial rates but got %d!" % (self.basis.size - 1, len(initial_rates))
             self.params[:] = self._rates_to_params(initial_rates)
-        assert(evotype in ("densitymx", "svterm", "cterm"))
 
         if evotype == "densitymx":  # for now just densitymx is supported
             rep = replib.DMOpRepDense(_np.ascontiguousarray(_np.identity(dim, 'd')))
+        elif evotype == "chp":
+            rep = dim
         else:
             raise ValueError("Invalid evotype '%s' for %s" % (evotype, self.__class__.__name__))
 
         LinearOperator.__init__(self, rep, evotype)
         self._update_rep()  # initialize self._rep
+        self._paramlbls = _np.array(['sqrt(%s error rate)' % bl for bl in self.basis.labels[1:]], dtype=object)
 
     def _update_rep(self):
         # Create dense error superoperator from paramvec
-        errormap = _np.identity(self.dim)
-        for rate, ss in zip(self._params_to_rates(self.params), self.stochastic_superops):
-            errormap += rate * ss
-        self._rep.base[:, :] = errormap
+        if self._evotype == "densitymx":
+            errormap = _np.identity(self.dim)
+            for rate, ss in zip(self._params_to_rates(self.params), self.stochastic_superops):
+                errormap += rate * ss
+            self._rep.base[:, :] = errormap
 
     def _rates_to_params(self, rates):
         return _np.sqrt(_np.array(rates))
@@ -2754,7 +2891,10 @@ class StochasticNoiseOp(LinearOperator):
         -------
         numpy.ndarray
         """
-        return self._rep.base  # copy?
+        if self._evotype == 'densitymx':
+            return self._rep.base  # copy?
+        else:
+            raise NotImplementedError('No to_dense implemented for evotype "%s"' % self._evotype)
 
     #def torep(self):
     #    """
@@ -2888,6 +3028,49 @@ class StochasticNoiseOp(LinearOperator):
         # so d( sum(abs(rates)) )/dparam_i = 2*param_i
         return 2 * self.to_vector()
 
+    def get_chp_str(self, targets=None):
+        """Return a string suitable for printing to a CHP input file after stochastically selecting operation.
+
+        Parameters
+        ----------
+        targets: list of int
+            Qubits to be applied to (if None, uses stored CHP strings directly)
+
+        Returns
+        -------
+        s : str
+            String of CHP code
+        """
+        assert (self._evotype == 'chp'), "Must have 'chp' evotype to use get_chp_str"
+
+        rates = self._params_to_rates(self.to_vector())
+        all_rates = [*rates, 1.0 - sum(rates)]  # Include identity so that probabilities are 1
+        index = self.rand_state.choice(self.basis.size, p=all_rates)
+
+        # If first entry, no operation selected
+        if index == self.basis.size - 1:
+            return ''
+
+        op = self.stochastic_superops[index]
+        chp_ops = op._rep.chp_ops
+        nqubits = op._rep.nqubits
+
+        if targets is not None:
+            assert len(targets) == nqubits, "Got {0} targets instead of required {1}".format(len(targets), nqubits)
+            target_map = {str(i): str(t) for i, t in enumerate(targets)}
+
+        s = ""
+        for op in chp_ops:
+            # Substitute if alternate targets provided
+            if targets is not None:
+                op_str = ''.join([target_map[c] if c in target_map else c for c in op])
+            else:
+                op_str = op
+
+            s += op_str + '\n'
+
+        return s
+
     @property
     def num_params(self):
         """
@@ -2944,6 +3127,7 @@ class StochasticNoiseOp(LinearOperator):
     def __str__(self):
         s = "Stochastic noise operation map with dim = %d, num params = %d\n" % \
             (self.dim, self.num_params)
+        s += 'Rates: %s\n' % self._params_to_rates(self.to_vector())
         return s
 
 
@@ -2968,8 +3152,12 @@ class DepolarizeOp(StochasticNoiseOp):
 
     initial_rate : float, optional
         the initial error rate.
+
+    seed_or_state : float or RandomState, optional
+            Random seed for RandomState (or directly provided RandomState)
+            for sampling stochastic superoperators with the 'chp' evotype.
     """
-    def __init__(self, dim, basis="pp", evotype="densitymx", initial_rate=0):
+    def __init__(self, dim, basis="pp", evotype="densitymx", initial_rate=0, seed_or_state=None):
         """
         Create a new DepolarizeOp, representing a depolarizing channel.
 
@@ -2990,13 +3178,25 @@ class DepolarizeOp(StochasticNoiseOp):
 
         initial_rate : float, optional
             the initial error rate.
+
+        seed_or_state : float or RandomState, optional
+            Random seed for RandomState (or directly provided RandomState)
+            for sampling stochastic superoperators with the 'chp' evotype.
         """
-        num_rates = dim - 1
+        if evotype == 'chp':
+            assert (basis == 'pp'), "Only Pauli basis is allowed for 'chp' evotype"
+            # For chp (and statevec, etc), want full superoperator basis
+            basis = _Basis.cast(basis, 2**dim, sparse=False)
+        else:
+            basis = _Basis.cast(basis, dim, sparse=False)
+
+        num_rates = basis.size - 1
         initial_sto_rates = [initial_rate / num_rates] * num_rates
-        StochasticNoiseOp.__init__(self, dim, basis, evotype, initial_sto_rates)
+        StochasticNoiseOp.__init__(self, dim, basis, evotype, initial_sto_rates, seed_or_state)
 
         # For DepolarizeOp, set params to only first element
         self.params = _np.array([self.params[0]])
+        self._paramlbls = _np.array(["common stochastic error rate for depolarization"], dtype=object)
 
     def _rates_to_params(self, rates):
         """Note: requires rates to all be the same"""
@@ -3029,6 +3229,12 @@ class DepolarizeOp(StochasticNoiseOp):
         if memo is not None and id(self) in memo: return memo[id(self)]
         copyOfMe = DepolarizeOp(self.dim, self.basis, self._evotype, self._params_to_rates(self.to_vector())[0])
         return self._copy_gpindices(copyOfMe, parent, memo)
+
+    def __str__(self):
+        s = "Depolarize noise operation map with dim = %d, num params = %d\n" % \
+            (self.dim, self.num_params)
+        s += 'Strength: %s\n' % (self.params**2 * (self.basis.size - 1))
+        return s
 
 
 class LindbladOp(LinearOperator, _ErrorGeneratorContainer):
@@ -4054,6 +4260,13 @@ class LindbladOp(LinearOperator, _ErrorGeneratorContainer):
             An array of length self.num_params
         """
         return _np.exp(self.errorgen.total_term_magnitude) * self.errorgen.total_term_magnitude_deriv
+
+    @property
+    def parameter_labels(self):
+        """
+        An array of labels (usually strings) describing this model member's parameters.
+        """
+        return self.errorgen.parameter_labels
 
     @property
     def num_params(self):
@@ -5142,6 +5355,18 @@ class ComposedOp(LinearOperator):
         return ret
 
     @property
+    def parameter_labels(self):
+        """
+        An array of labels (usually strings) describing this model member's parameters.
+        """
+        vl = _np.empty(self.num_params, dtype=object)
+        for operation in self.factorops:
+            factorgate_local_inds = _modelmember._decompose_gpindices(
+                self.gpindices, operation.gpindices)
+            vl[factorgate_local_inds] = operation.parameter_labels
+        return vl
+
+    @property
     def num_params(self):
         """
         Get the number of independent parameters which specify this operation.
@@ -5449,6 +5674,24 @@ class ComposedOp(LinearOperator):
         """
         return self.errorgen_coefficients(return_basis=False, logscale_nonham=True)
 
+    def get_chp_str(self, targets=None):
+        """Return a string suitable for printing to a CHP input file from all underlying operations.
+
+        Parameters
+        ----------
+        targets: list of int
+            Qubits to be applied to (if None, uses stored CHP strings directly)
+
+        Returns
+        -------
+        s : str
+            String of CHP code
+        """
+        s = ""
+        for op in self.factorops:
+            s += op.get_chp_str(targets)
+        return s
+
     def __str__(self):
         """ Return string representation """
         s = "Composed operation of %d factors:\n" % len(self.factorops)
@@ -5507,6 +5750,10 @@ class ComposedDenseOp(ComposedOp, DenseOperatorInterface):
         """
         ComposedOp.__init__(self, ops_to_compose, dim, evotype, dense_rep=True)
         DenseOperatorInterface.__init__(self)
+
+    @property
+    def parameter_labels(self):  # Needed because method resolution finds __getattr__ before base class property
+        return ComposedOp.parameter_labels.fget(self)
 
 
 class ExponentiatedOp(LinearOperator):
@@ -5663,6 +5910,13 @@ class ExponentiatedOp(LinearOperator):
 
     #FUTURE: term-related functions (maybe base off of ComposedOp or use a composedop to generate them?)
     # e.g. ComposedOp([self.exponentiated_op] * power, dim, evotype)
+
+    @property
+    def parameter_labels(self):
+        """
+        An array of labels (usually strings) describing this model member's parameters.
+        """
+        return self.exponentiated_op.paramter_labels
 
     @property
     def num_params(self):
@@ -5859,6 +6113,31 @@ class EmbeddedOp(LinearOperator):
             assert(nQubits is not None), "State space does not contain a definite number of qubits!"
             rep = replib.SBOpRepEmbedded(self.embedded_op._rep,
                                          nQubits, qubit_indices)
+        elif evotype == "chp":
+            # assert that all state space labels == qubits, since we only know
+            # how to embed cliffords on qubits...
+            assert(len(self.state_space_labels.labels) == 1
+                   and all([ld == 2 for ld in self.state_space_labels.labeldims.values()])), \
+                "All state space labels must correspond to *qubits*"
+            assert(self.embedded_op._evotype == 'chp'), \
+                "Embedded op must also have CHP evotype instead of %s" % self.embedded_op._evotype
+            op_nqubits = (self.embedded_op.dim - 1).bit_length()
+            assert(len(target_labels) == op_nqubits), \
+                "Inconsistent number of qubits in `target_labels` ({0}) and CHP `embedded_op` ({1})".format(
+                    len(target_labels), op_nqubits)
+            assert(not self.dense_rep), "`dense_rep` can only be set to True for densitymx and statevec evotypes"
+
+            qubitLabels = self.state_space_labels.labels[0]
+            qubit_indices = _np.array([qubitLabels.index(targetLbl)
+                                       for targetLbl in target_labels], _np.int64)
+
+            nQubits = self.state_space_labels.nqubits
+            assert(nQubits is not None), "State space does not contain a definite number of qubits!"
+
+            # Store qubit indices as targets for later use
+            self.target_indices = qubit_indices
+
+            rep = opDim  # Don't set representation again, just use embedded_op calls later
 
         elif evotype in ("statevec", "densitymx"):
 
@@ -6284,6 +6563,13 @@ class EmbeddedOp(LinearOperator):
         return self.embedded_op.total_term_magnitude_deriv
 
     @property
+    def parameter_labels(self):
+        """
+        An array of labels (usually strings) describing this model member's parameters.
+        """
+        return self.embedded_op.parameter_labels
+
+    @property
     def num_params(self):
         """
         Get the number of independent parameters which specify this operation.
@@ -6610,6 +6896,31 @@ class EmbeddedOp(LinearOperator):
         """
         return self.embedded_op.has_nonzero_hessian()
 
+    def get_chp_str(self, targets=None):
+        """Return a string suitable for printing to a CHP input file from the embedded operations.
+
+        Just calls underlying get_chp_str but with an extra layer of target redirection.
+
+        Parameters
+        ----------
+        targets: list of int
+            Qubits to be applied to (if None, uses stored CHP strings directly).
+
+        Returns
+        -------
+        s : str
+            String of CHP code
+        """
+        target_indices = list(self.target_indices)
+
+        # Targets are for the full embedded operation so we need to map these to the actual targets of the CHP operation
+        if targets is not None:
+            assert len(targets) == self.state_space_labels.nqubits, \
+                "Got {0} targets instead of required {1}".format(len(targets), self.state_space_labels.nqubits)
+            target_indices = [targets[ti] for ti in self.target_indices]
+
+        return self.embedded_op.get_chp_str(target_indices)
+
     def __str__(self):
         """ Return string representation """
         s = "Embedded operation with full dimension %d and state space %s\n" % (self.dim, self.state_space_labels)
@@ -6676,6 +6987,10 @@ class EmbeddedDenseOp(EmbeddedOp, DenseOperatorInterface):
         EmbeddedOp.__init__(self, state_space_labels, target_labels,
                             operation_to_embed, dense_rep=True)
         DenseOperatorInterface.__init__(self)
+
+    @property
+    def parameter_labels(self):  # Needed because method resolution finds __getattr__ before base class property
+        return EmbeddedOp.parameter_labels.fget(self)
 
 
 class CliffordOp(LinearOperator):
@@ -7457,6 +7772,19 @@ class ComposedErrorgen(LinearOperator):
                 self.gpindices, eg.gpindices)
             ret[eg_local_inds] += eg.total_term_magnitude_deriv
         return ret
+
+    @property
+    def parameter_labels(self):
+        """
+        An array of labels (usually strings) describing this model member's parameters.
+        """
+        assert(self.gpindices is not None), "Must set a ComposedErrorgen's .gpindices before calling parameter_labels"
+        vl = _np.empty(self.num_params, dtype=object)
+        for eg in self.factors:
+            factor_local_inds = _modelmember._decompose_gpindices(
+                self.gpindices, eg.gpindices)
+            vl[factor_local_inds] = eg.parameter_labels
+        return vl
 
     @property
     def num_params(self):
@@ -8317,6 +8645,7 @@ class LindbladErrorgen(LinearOperator):
 
         LinearOperator.__init__(self, rep, evotype)  # sets self.dim
         if self._rep is not None: self._update_rep()  # updates _rep whether it's a dense or sparse matrix
+        self._paramlbls = _gt.lindblad_param_labels(self.ham_basis, self.other_basis, self.param_mode, self.nonham_mode)
         #Done with __init__(...)
 
     def _init_generators(self, dim):
