@@ -73,7 +73,7 @@ def _sample_stochastic_noise_op(snop, max_strength, max_weight = 1,
 
     Parameters
     ----------
-    snop : TODO
+    snop : StochasticNoiseOp
         TODO
     
     max_strength : float
@@ -221,7 +221,7 @@ def sample_noise_model(ideal_model, max_total_strengths = {}, max_weight = 1,
         A create_crosstalk_free_model with stochastic_error_probs
         determined by sample_noise_model and its inputs.
     """
-    
+
     noisy_model = ideal_model.copy()
 
     if rand_state is None:
@@ -231,7 +231,7 @@ def sample_noise_model(ideal_model, max_total_strengths = {}, max_weight = 1,
         if isinstance(op, _op.ComposedOp):
             # TODO: This would be easier if ComposedOp.num_params counted factorop num_params
             for subop in op.factorops:
-                if subop.num_params == 0: # No sampling needed, skip
+                if subop.num_params == 0: # No sampling is needed, so skip
                     continue
                 elif isinstance(subop, _op.StochasticNoiseOp):
                     max_strength = max_total_strengths.get(label.name, 0.0)
