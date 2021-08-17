@@ -12,13 +12,12 @@
 //#define DEBUG(x) x
 #define DEBUG(x) 
 
-namespace CReps_densitymx {
+namespace CReps {
 
   /****************************************************************************\
   |* StateCRep                                                              *|
   \****************************************************************************/
   StateCRep::StateCRep(INT dim) {
-    //DEBUG std::cout << "densitymx.StateCRep initialized w/dim = " << dim << std::endl;
     _dataptr = new double[dim];
     for(INT i=0; i<dim; i++) _dataptr[i] = 0;
     _dim = dim;
@@ -26,7 +25,7 @@ namespace CReps_densitymx {
   }
   
   StateCRep::StateCRep(double* data, INT dim, bool copy) {
-    //DEBUG std::cout << "StateCRep initialized w/dim = " << dim << std::endl;
+    //DEGUG std::cout << "StateCRep initialized w/dim = " << dim << std::endl;
     if(copy) {
       _dataptr = new double[dim];
       for(INT i=0; i<dim; i++) {

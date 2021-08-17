@@ -6,7 +6,7 @@
 typedef std::complex<double> dcomplex;
 typedef long long INT;
 
-namespace CReps_statevec {
+namespace CReps {
 
   class EffectCRep {
     public:
@@ -24,7 +24,7 @@ namespace CReps_statevec {
     EffectCRep_Dense(dcomplex* data, INT dim);
     virtual ~EffectCRep_Dense();
     virtual double probability(StateCRep* state);
-    virtual dcomplex amplitude(StateCRep* state);
+    virtual dcomplex amplitude(StateCRep* state);;
   };
 
   class EffectCRep_TensorProd :public EffectCRep {
@@ -52,15 +52,4 @@ namespace CReps_statevec {
     virtual dcomplex amplitude(StateCRep* state);
   };
 
-  class EffectCRep_Composed :public EffectCRep {
-    public:
-    OpCRep* _errgen_ptr;
-    EffectCRep* _effect_ptr;
-    INT _errgen_id;
-
-    EffectCRep_Composed(OpCRep* errgen_oprep, EffectCRep* effect_rep, INT errgen_id, INT dim);
-    virtual ~EffectCRep_Composed();
-    virtual double probability(StateCRep* state);
-    virtual dcomplex amplitude(StateCRep* state);
-  };
 }

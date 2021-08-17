@@ -14,7 +14,7 @@
 //#define DEBUG(x) x
 #define DEBUG(x) 
 
-namespace CReps_densitymx {
+namespace CReps {
 
   /****************************************************************************\
   |* OpCRep                                                               *|
@@ -488,10 +488,7 @@ namespace CReps_densitymx {
     
     double* F = out_state->_dataptr; //will be output
     double* scratch = new double[N];
-    double* B = new double[N];
-    for(INT i=0; i<N; i++) B[i] = init_state->_dataptr[i];
-    //can't do: double* B = init_state->_dataptr; because B is modified by expm_... below
-        
+    double* B = init_state->_dataptr;
     double tol = 1e-16; // 2^-53 (=Scipy default) -- TODO: make into an arg...
     
     // F = expm(A)*B

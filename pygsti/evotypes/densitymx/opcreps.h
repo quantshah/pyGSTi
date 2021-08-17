@@ -7,7 +7,7 @@ typedef std::complex<double> dcomplex;
 typedef long long INT;
 
 
-namespace CReps_densitymx {
+namespace CReps {
   //Forward declarations (as necessary)
   class OpCRep;
 

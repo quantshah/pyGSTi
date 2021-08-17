@@ -7,7 +7,7 @@ typedef std::complex<double> dcomplex;
 typedef long long INT;
 
 
-namespace CReps_statevec {
+namespace CReps {
 
   class OpCRep {
     public:

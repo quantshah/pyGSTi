@@ -16,18 +16,14 @@ from abc import ABC as _ABC, abstractmethod as _abstractmethod
 from pathlib import Path as _Path
 
 import numpy as _np
-import collections as _collections
 
 from pygsti.circuits.circuit import Circuit as _Circuit
 from pygsti.circuits.circuitconstruction import to_circuits as _circuit_list
-from pygsti.models.modelconstruction import create_explicit_model_from_expressions as _build_explicit_model
+from pygsti.models.modelconstruction import create_explicit_model as _build_explicit_model
 from pygsti.circuits.gstcircuits import create_lsgst_circuit_lists as _make_lsgst_lists
 from pygsti.baseobjs.label import Label as _Label
 from pygsti.baseobjs.polynomial import bulk_load_compact_polynomials as _bulk_load_compact_polys
 from pygsti.protocols import gst as _gst
-from pygsti.tools import optools as _ot
-from pygsti.tools import basistools as _bt
-from pygsti.processors import QubitProcessorSpec as _QubitProcessorSpec
 
 
 class ModelPack(_ABC):
@@ -53,7 +49,7 @@ class ModelPack(_ABC):
         self._gscache = {}
 
     @_abstractmethod
-    def _target_model(self, sslbls, **kwargs):
+    def _target_model(self, sslbls):
         pass
 
     def _build_explicit_target_model(self, sslbls, gate_names, gate_expressions, **kwargs):
@@ -67,8 +63,7 @@ class ModelPack(_ABC):
         updated_gateexps = [gexp.format(*sslbls) for gexp in gate_expressions]
         return _build_explicit_model(full_sslbls, updated_gatenames, updated_gateexps, **kwargs)
 
-    def target_model(self, gate_type="full", prep_type="auto", povm_type="auto", instrument_type="auto",
-                     simulator="auto", evotype='default', qubit_labels=None):
+    def target_model(self, parameterization_type="full", simulator="auto", qubit_labels=None, evotype='default'):
         """
         Returns a copy of the target model in the given parameterization.
 
@@ -99,24 +94,32 @@ class ModelPack(_ABC):
         assert(len(qubit_labels) == len(self._sslbls)), \
             "Expected %d qubit labels and got: %s!" % (len(self._sslbls), str(qubit_labels))
 
-        cache_key = (gate_type, prep_type, povm_type, instrument_type, simulator, evotype, qubit_labels)
-        if cache_key not in self._gscache:
+        if (parameterization_type, simulator, qubit_labels, evotype) not in self._gscache:
             # cache miss
-            mdl = self._target_model(qubit_labels, gate_type=gate_type, prep_type=prep_type, povm_type=povm_type,
-                                     instrument_type=instrument_type, evotype=evotype)
+            mdl = self._target_model(qubit_labels, evotype)
+            mdl.set_all_parameterizations(parameterization_type)  # automatically sets simulator
 
-            # Set the simulator (if auto, setter initializes to matrix or map)
-            mdl.sim = simulator
+            # We separated parameter names from evotype names - so no more "H+S Terms"  TODO REMOVE?
+            # from pygsti.forwardsims.termforwardsim import TermForwardSimulator as _TermFSim
+            # if parameterization_type == "H+S terms":
+            #     assert(simulator == "auto" or isinstance(simulator, _TermFSim)), \
+            #         "Invalid `simulator` argument for H+S terms: %s!" % str(type(simulator))
+            #     if simulator == "auto":
+            #         sim = _TermFSim(mode="taylor", max_order=1)
+            #
+            #     key_path, val_path = self._get_cachefile_names(parameterization_type, sim)
+            #     if key_path.exists() and val_path.exists():
+            #         sim.set_cache(_load_calccache(key_path, val_path))    # TODO
+            #
+            #     mdl.sim = sim
+            # else:
+            if simulator != "auto":
+                mdl.sim = simulator
 
             # finally cache result
-            self._gscache[cache_key] = mdl
+            self._gscache[(parameterization_type, simulator, qubit_labels, evotype)] = mdl
 
-        return self._gscache[cache_key].copy()
-
-    def processor_spec(self, qubit_labels=None):
-        """ TODO: docstring """
-        static_target_model = self.target_model('static', qubit_labels=qubit_labels)  # assumed to be an ExplicitOpModel
-        return static_target_model.create_processor_spec(self._sslbls)
+        return self._gscache[(parameterization_type, simulator, qubit_labels, evotype)].copy()
 
     def _get_cachefile_names(self, param_type, simulator):
         """ Get the standard cache file names for a modelpack """
@@ -368,7 +371,7 @@ class GSTModelPack(ModelPack):
             max_lengths_list = list(_gen_max_length(max_max_length))
 
         return _gst.StandardGSTDesign(
-            self.processor_spec(qubit_labels),
+            self._target_model(qubit_labels, evotype),
             self.prep_fiducials(qubit_labels),
             self.meas_fiducials(qubit_labels),
             self.germs(qubit_labels, lite),

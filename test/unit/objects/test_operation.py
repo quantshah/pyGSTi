@@ -421,7 +421,7 @@ class TPOpTester(MutableDenseOpBase, BaseCase):
 
     @staticmethod
     def build_gate():
-        return _create_operation([(4,)], [('Q0',)], "Y(pi/4,Q0)", "gm", parameterization="full TP")
+        return _create_operation([(4,)], [('Q0',)], "Y(pi/4,Q0)", "gm", parameterization="TP")
 
     #REMOVED - we don't support .compose methods anymore
     #def test_composition(self):
@@ -446,7 +446,7 @@ class TPOpTester(MutableDenseOpBase, BaseCase):
 
     def test_convert(self):
         conv = op.convert(self.gate, "full", "gm")
-        conv = op.convert(self.gate, "full TP", "gm")
+        conv = op.convert(self.gate, "TP", "gm")
         # TODO assert correctness
 
     def test_first_row_read_only(self):
@@ -646,7 +646,8 @@ class CPTPLindbladErrorgenTester(LindbladErrorgenBase, BaseCase):
     def build_gate():
         mx = np.identity(4, 'd')
         return op.LindbladErrorgen.from_operation_matrix(
-            mx, "CPTP", "pp", truncate=True, mx_basis="pp", evotype='default'
+            mx, ham_basis="pp", nonham_basis="pp", param_mode="cptp", nonham_mode="all",
+            truncate=True, mx_basis="pp", evotype='default'
         )
 
 
@@ -657,7 +658,8 @@ class DiagonalCPTPLindbladDenseOpTester(LindbladErrorgenBase, BaseCase):
     def build_gate():
         mx = np.identity(4, 'd')
         return op.LindbladErrorgen.from_operation_matrix(
-            mx, "H+S", 'pp', truncate=True, mx_basis="pp", evotype='default'
+            mx, ham_basis="pp", nonham_basis="pp", param_mode="cptp",
+            nonham_mode="diagonal", truncate=True, mx_basis="pp", evotype='default'
         )
 
 
@@ -672,7 +674,8 @@ class CPTPLindbladSparseOpTester(LindbladErrorgenBase, BaseCase):
                             [0, 0, -1, 0]], 'd')
         sparsemx = sps.csr_matrix(densemx, dtype='d')
         return op.LindbladErrorgen.from_operation_matrix(
-            sparsemx, "CPTP", 'pp', truncate=True, mx_basis="pp", evotype='default'
+            sparsemx, ham_basis="pp", nonham_basis="pp", param_mode="cptp", nonham_mode="all",
+            truncate=True, mx_basis="pp", evotype='default'
         )
 
 
@@ -703,7 +706,8 @@ class UnconstrainedLindbladDenseOpTester(LindbladErrorgenBase, BaseCase):
         mx = np.identity(4, 'd')
         ppBasis = Basis.cast("pp", 4)
         return op.LindbladErrorgen.from_operation_matrix(
-            mx, "GLND", ppBasis, truncate=True, mx_basis="pp", evotype='default'
+            mx, ham_basis=ppBasis, nonham_basis=ppBasis, param_mode="unconstrained",
+            nonham_mode="all", truncate=True, mx_basis="pp", evotype='default'
         )
 
 
@@ -714,9 +718,9 @@ class DiagonalUnconstrainedLindbladDenseOpTester(LindbladErrorgenBase, BaseCase)
     def build_gate():
         mx = np.identity(4, 'd')
         ppMxs = bc.pp_matrices(2)
-
         return op.LindbladErrorgen.from_operation_matrix(
-            mx, "H+s", ppMxs, truncate=True, mx_basis="pp", evotype='default'
+            mx, ham_basis=ppMxs, nonham_basis=ppMxs, param_mode="unconstrained",
+            nonham_mode="diagonal", truncate=True, mx_basis="pp", evotype='default'
         )
 
 
@@ -728,7 +732,8 @@ class UntruncatedLindbladDenseOpTester(LindbladErrorgenBase, BaseCase):
         mx = np.identity(4, 'd')
         ppBasis = Basis.cast("pp", 4)
         return op.LindbladErrorgen.from_operation_matrix(
-            mx, "GLND", ppBasis, truncate=False, mx_basis="pp", evotype='default'
+            mx, ham_basis=ppBasis, nonham_basis=ppBasis, param_mode="unconstrained",
+            nonham_mode="all", truncate=False, mx_basis="pp", evotype='default'
         )
 
 

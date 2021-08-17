@@ -15,9 +15,10 @@ from .. cimport basereps_cython as _basereps_cython
 ctypedef long long INT
 ctypedef unsigned long long UINT
 
-cdef extern from "statecreps.h" namespace "CReps_statevec":
+cdef extern from "statecreps.h" namespace "CReps":
 
     cdef cppclass StateCRep:
+        StateCRep() except +
         StateCRep(INT) except +
         StateCRep(double complex*,INT,bool) except +
         void copy_from(StateCRep*)
@@ -31,6 +32,3 @@ cdef class StateRep(_basereps_cython.StateRep):
     cdef public object state_space
     cdef public object basis
     #cdef double [:] data_view # alt way to hold a reference
-
-cdef class StateRepDensePure(StateRep):
-    pass

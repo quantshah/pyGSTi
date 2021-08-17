@@ -12,7 +12,7 @@
 //#define DEBUG(x) x
 #define DEBUG(x) 
 
-namespace CReps_stabilizer {
+namespace CReps {
 
   /****************************************************************************\
   |* StateCRep                                                              *|

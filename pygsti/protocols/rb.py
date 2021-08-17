@@ -21,24 +21,20 @@ from pygsti.algorithms import rbfit as _rbfit
 
 class CliffordRBDesign(_vb.BenchmarkingDesign):
     """
-    TODO: update docstrings in this module -- new clifford_compilations arg to __init__ fns and pspec
-           doesn't hold compilation libraries anymore.
-
     Experiment design for Clifford randomized benchmarking.
 
     This encapsulates a "Clifford randomized benchmarking" (CRB) experiment.  CRB is the RB protocol defined
     in "Scalable and robust randomized benchmarking of quantum processes", Magesan et al. PRL 106 180504 (2011).
     The circuits created by this function will respect the connectivity and gate-set of the device encoded
-    by `pspec` (see the :class:`QubitProcessorSpec` object docstring for how to construct the relevant `pspec`
-    for a device).
+    by `pspec` (see the :class:`ProcessorSpec` object docstring for how to construct the relevant `pspec` for a device).
 
     Note that this function uses the convention that a depth "l" CRB circuit  consists of "l"+2 Clifford gates
     before compilation.
 
     Parameters
     ----------
-    pspec : QubitProcessorSpec
-       The QubitProcessorSpec for the device that the CRB experiment is being generated for, which defines the
+    pspec : ProcessorSpec
+       The ProcessorSpec for the device that the CRB experiment is being generated for, which defines the
        "native" gate-set and the connectivity of the device. The returned CRB circuits will be over
        the gates in `pspec`, and will respect the connectivity encoded by `pspec`.
 
@@ -51,7 +47,7 @@ class CliffordRBDesign(_vb.BenchmarkingDesign):
 
     qubit_labels : list, optional
         If not None, a list of the qubits that the RB circuits are to be sampled for. This should
-        be all or a subset of the qubits in the device specified by the QubitProcessorSpec `pspec`.
+        be all or a subset of the qubits in the device specified by the ProcessorSpec `pspec`.
         If None, it is assumed that the RB circuit should be over all the qubits. Note that the
         ordering of this list is the order of the ``wires'' in the returned circuit, but is otherwise
         irrelevant. If desired, a circuit that explicitly idles on the other qubits can be obtained
@@ -126,7 +122,7 @@ class CliffordRBDesign(_vb.BenchmarkingDesign):
 
         qubit_labels : list, optional
             If not None, a list of the qubits that the RB circuits are to be sampled for. This should
-            be all or a subset of the qubits in the device specified by the QubitProcessorSpec `pspec`.
+            be all or a subset of the qubits in the device specified by the ProcessorSpec `pspec`.
             If None, it is assumed that the RB circuit should be over all the qubits. Note that the
             ordering of this list is the order of the ``wires'' in the returned circuit, but is otherwise
             irrelevant. If desired, a circuit that explicitly idles on the other qubits can be obtained
@@ -187,23 +183,23 @@ class CliffordRBDesign(_vb.BenchmarkingDesign):
                               interleaved_circuit)
         return self
 
-    def __init__(self, pspec, clifford_compilations, depths, circuits_per_depth, qubit_labels=None, randomizeout=False,
+    def __init__(self, pspec, depths, circuits_per_depth, qubit_labels=None, randomizeout=False,
                  interleaved_circuit=None,
                  citerations=20, compilerargs=(), descriptor='A Clifford RB experiment',
-                 add_default_protocol=False, seed=None, verbosity=1, num_processes=1):
+                 add_default_protocol=False, seed=1234, verbosity=1, num_processes=1):
         """
         Generates a "Clifford randomized benchmarking" (CRB) experiment, which is the RB protocol defined
         in "Scalable and robust randomized benchmarking of quantum processes", Magesan et al. PRL 106 180504 (2011).
         The circuits created by this function will respect the connectivity and gate-set of the device encoded
-        by `pspec` (see the QubitProcessorSpec object docstring for how to construct the relevant `pspec` for a device).
+        by `pspec` (see the ProcessorSpec object docstring for how to construct the relevant `pspec` for a device).
 
         Note that this function uses the convention that a depth "l" CRB circuit  consists of "l"+2 Clifford gates
         before compilation.
 
         Parameters
         ----------
-        pspec : QubitProcessorSpec
-           The QubitProcessorSpec for the device that the CRB experiment is being generated for, which defines the
+        pspec : ProcessorSpec
+           The ProcessorSpec for the device that the CRB experiment is being generated for, which defines the
            "native" gate-set and the connectivity of the device. The returned CRB circuits will be over
            the gates in `pspec`, and will respect the connectivity encoded by `pspec`.
 
@@ -216,7 +212,7 @@ class CliffordRBDesign(_vb.BenchmarkingDesign):
 
         qubit_labels : list, optional
             If not None, a list of the qubits that the RB circuits are to be sampled for. This should
-            be all or a subset of the qubits in the device specified by the QubitProcessorSpec `pspec`.
+            be all or a subset of the qubits in the device specified by the ProcessorSpec `pspec`.
             If None, it is assumed that the RB circuit should be over all the qubits. Note that the
             ordering of this list is the order of the ``wires'' in the returned circuit, but is otherwise
             irrelevant. If desired, a circuit that explicitly idles on the other qubits can be obtained
@@ -266,8 +262,7 @@ class CliffordRBDesign(_vb.BenchmarkingDesign):
         seed : int, optional
             A seed to initialize the random number generator used for creating random clifford
             circuits. The seed is incremented for each circuit sampled to ensure deterministic
-            sampling even when using multiprocessing for parallelization. If None, a random
-            integer between 1 and 1e6 is selected.
+            sampling even when using multiprocessing for parallelization.
 
         verbosity : int, optional
             If > 0 the number of circuits generated so far is shown.
@@ -283,18 +278,15 @@ class CliffordRBDesign(_vb.BenchmarkingDesign):
         circuit_lists = []
         ideal_outs = []
 
-        if seed is None:
-            self.seed = _np.random.randint(1, 1e6)  # Pick a random seed
-        else:
-            self.seed = seed
+        self.seed = seed
 
         for lnum, l in enumerate(depths):
-            lseed = self.seed + lnum * circuits_per_depth
+            lseed = seed + lnum * circuits_per_depth
             if verbosity > 0:
                 print('- Sampling {} circuits at CRB length {} ({} of {} depths) with seed {}'.format(
                     circuits_per_depth, l, lnum + 1, len(depths), lseed))
 
-            args_list = [(pspec, clifford_compilations, l)] * circuits_per_depth
+            args_list = [(pspec, l)] * circuits_per_depth
             kwargs_list = [dict(qubit_labels=qubit_labels, randomizeout=randomizeout, citerations=citerations,
                                 compilerargs=compilerargs, interleaved_circuit=interleaved_circuit,
                                 seed=lseed + i) for i in range(circuits_per_depth)]
@@ -347,8 +339,8 @@ class DirectRBDesign(_vb.BenchmarkingDesign):
 
     Parameters
     ----------
-    pspec : QubitProcessorSpec
-       The QubitProcessorSpec for the device that the circuit is being sampled for, which defines the
+    pspec : ProcessorSpec
+       The ProcessorSpec for the device that the circuit is being sampled for, which defines the
        "native" gate-set and the connectivity of the device. The returned DRB circuit will be over
        the gates in `pspec`, and will respect the connectivity encoded by `pspec`. Note that `pspec`
        is always handed to the sampler, as the first argument of the sampler function (this is only
@@ -379,9 +371,9 @@ class DirectRBDesign(_vb.BenchmarkingDesign):
         corresponds to sampling according to rb.sampler.circuit_layer_of_oneQgates [which is not
         a valid form of sampling for n-qubit DRB, but is not explicitly forbidden in this function].
         If `sampler` is a function, it should be a function that takes as the first argument a
-        QubitProcessorSpec, and returns a random circuit layer as a list of gate Label objects. Note that
+        ProcessorSpec, and returns a random circuit layer as a list of gate Label objects. Note that
         the default 'Qelimination' is not necessarily the most useful in-built sampler, but it is the
-        only sampler that requires no parameters beyond the QubitProcessorSpec *and* works for arbitrary
+        only sampler that requires no parameters beyond the ProcessorSpec *and* works for arbitrary
         connectivity devices. See the docstrings for each of these samplers for more information.
 
     samplerargs : list, optional
@@ -488,9 +480,9 @@ class DirectRBDesign(_vb.BenchmarkingDesign):
             corresponds to sampling according to rb.sampler.circuit_layer_of_oneQgates [which is not
             a valid form of sampling for n-qubit DRB, but is not explicitly forbidden in this function].
             If `sampler` is a function, it should be a function that takes as the first argument a
-            QubitProcessorSpec, and returns a random circuit layer as a list of gate Label objects. Note that
+            ProcessorSpec, and returns a random circuit layer as a list of gate Label objects. Note that
             the default 'Qelimination' is not necessarily the most useful in-built sampler, but it is the
-            only sampler that requires no parameters beyond the QubitProcessorSpec *and* works for arbitrary
+            only sampler that requires no parameters beyond the ProcessorSpec *and* works for arbitrary
             connectivity devices. See the docstrings for each of these samplers for more information.
 
         samplerargs : list, optional
@@ -571,11 +563,10 @@ class DirectRBDesign(_vb.BenchmarkingDesign):
                               add_default_protocol)
         return self
 
-    def __init__(self, pspec, clifford_compilations, depths, circuits_per_depth, qubit_labels=None,
-                 sampler='Qelimination', samplerargs=[],
+    def __init__(self, pspec, depths, circuits_per_depth, qubit_labels=None, sampler='Qelimination', samplerargs=[],
                  addlocal=False, lsargs=(), randomizeout=False, cliffordtwirl=True, conditionaltwirl=True,
                  citerations=20, compilerargs=(), partitioned=False, descriptor='A DRB experiment',
-                 add_default_protocol=False, seed=None, verbosity=1, num_processes=1):
+                 add_default_protocol=False, seed=1234, verbosity=1, num_processes=1):
         """
         Generates a "direct randomized benchmarking" (DRB) experiments, which is the protocol introduced in
         arXiv:1807.07975 (2018).
@@ -588,8 +579,8 @@ class DirectRBDesign(_vb.BenchmarkingDesign):
 
         Parameters
         ----------
-        pspec : QubitProcessorSpec
-           The QubitProcessorSpec for the device that the circuit is being sampled for, which defines the
+        pspec : ProcessorSpec
+           The ProcessorSpec for the device that the circuit is being sampled for, which defines the
            "native" gate-set and the connectivity of the device. The returned DRB circuit will be over
            the gates in `pspec`, and will respect the connectivity encoded by `pspec`. Note that `pspec`
            is always handed to the sampler, as the first argument of the sampler function (this is only
@@ -620,9 +611,9 @@ class DirectRBDesign(_vb.BenchmarkingDesign):
             corresponds to sampling according to rb.sampler.circuit_layer_of_oneQgates [which is not
             a valid form of sampling for n-qubit DRB, but is not explicitly forbidden in this function].
             If `sampler` is a function, it should be a function that takes as the first argument a
-            QubitProcessorSpec, and returns a random circuit layer as a list of gate Label objects. Note that
+            ProcessorSpec, and returns a random circuit layer as a list of gate Label objects. Note that
             the default 'Qelimination' is not necessarily the most useful in-built sampler, but it is the
-            only sampler that requires no parameters beyond the QubitProcessorSpec *and* works for arbitrary
+            only sampler that requires no parameters beyond the ProcessorSpec *and* works for arbitrary
             connectivity devices. See the docstrings for each of these samplers for more information.
 
         samplerargs : list, optional
@@ -691,8 +682,7 @@ class DirectRBDesign(_vb.BenchmarkingDesign):
         seed : int, optional
             A seed to initialize the random number generator used for creating random clifford
             circuits. The seed is incremented for each circuit sampled to ensure deterministic
-            sampling even when using multiprocessing for parallelization. If None, a random
-            integer between 1 and 1e6 is selected.
+            sampling even when using multiprocessing for parallelization.
 
         verbosity : int, optional
             If > 0 the number of circuits generated so far is shown.
@@ -709,18 +699,15 @@ class DirectRBDesign(_vb.BenchmarkingDesign):
         circuit_lists = []
         ideal_outs = []
 
-        if seed is None:
-            self.seed = _np.random.randint(1, 1e6)  # Pick a random seed
-        else:
-            self.seed = seed
+        self.seed = seed
 
         for lnum, l in enumerate(depths):
-            lseed = self.seed + lnum * circuits_per_depth
+            lseed = seed + lnum * circuits_per_depth
             if verbosity > 0:
                 print('- Sampling {} circuits at DRB length {} ({} of {} depths) with seed {}'.format(
                     circuits_per_depth, l, lnum + 1, len(depths), lseed))
 
-            args_list = [(pspec, clifford_compilations, l)] * circuits_per_depth
+            args_list = [(pspec, l)] * circuits_per_depth
             kwargs_list = [dict(qubit_labels=qubit_labels, sampler=sampler, samplerargs=samplerargs,
                                 addlocal=addlocal, lsargs=lsargs, randomizeout=randomizeout,
                                 cliffordtwirl=cliffordtwirl, conditionaltwirl=conditionaltwirl,
@@ -786,8 +773,8 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
 
     Parameters
     ----------
-    pspec : QubitProcessorSpec
-       The QubitProcessorSpec for the device that the experiment is being generated for. The `pspec` is always
+    pspec : ProcessorSpec
+       The ProcessorSpec for the device that the experiment is being generated for. The `pspec` is always
        handed to the sampler, as the first argument of the sampler function.
 
     depths : list of ints
@@ -816,7 +803,7 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
 
     qubit_labels : list, optional
         If not None, a list of the qubits that the RB circuit is to be sampled for. This should
-        be all or a subset of the qubits in the device specified by the QubitProcessorSpec `pspec`.
+        be all or a subset of the qubits in the device specified by the ProcessorSpec `pspec`.
         If None, it is assumed that the RB circuit should be over all the qubits. Note that the
         ordering of this list is the order of the ``wires'' in the returned circuit, but is otherwise
         irrelevant.
@@ -828,9 +815,9 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
         corresponds to sampling according to rb.sampler.circuit_layer_of_oneQgates [which is not
         a valid option for n-qubit MRB -- it results in sim. 1-qubit MRB -- but it is not explicitly
         forbidden by this function]. If `sampler` is a function, it should be a function that takes
-        as the first argument a QubitProcessorSpec, and returns a random circuit layer as a list of gate
+        as the first argument a ProcessorSpec, and returns a random circuit layer as a list of gate
         Label objects. Note that the default 'Qelimination' is not necessarily the most useful
-        in-built sampler, but it is the only sampler that requires no parameters beyond the QubitProcessorSpec
+        in-built sampler, but it is the only sampler that requires no parameters beyond the ProcessorSpec
         *and* works for arbitrary connectivity devices. See the docstrings for each of these samplers
         for more information.
 
@@ -879,7 +866,7 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
 
         qubit_labels : list, optional
             If not None, a list of the qubits that the RB circuit is to be sampled for. This should
-            be all or a subset of the qubits in the device specified by the QubitProcessorSpec `pspec`.
+            be all or a subset of the qubits in the device specified by the ProcessorSpec `pspec`.
             If None, it is assumed that the RB circuit should be over all the qubits. Note that the
             ordering of this list is the order of the ``wires'' in the returned circuit, but is otherwise
             irrelevant.
@@ -891,9 +878,9 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
             corresponds to sampling according to rb.sampler.circuit_layer_of_oneQgates [which is not
             a valid option for n-qubit MRB -- it results in sim. 1-qubit MRB -- but it is not explicitly
             forbidden by this function]. If `sampler` is a function, it should be a function that takes
-            as the first argument a QubitProcessorSpec, and returns a random circuit layer as a list of gate
+            as the first argument a ProcessorSpec, and returns a random circuit layer as a list of gate
             Label objects. Note that the default 'Qelimination' is not necessarily the most useful
-            in-built sampler, but it is the only sampler that requires no parameters beyond the QubitProcessorSpec
+            in-built sampler, but it is the only sampler that requires no parameters beyond the ProcessorSpec
             *and* works for arbitrary connectivity devices. See the docstrings for each of these samplers
             for more information.
 
@@ -934,10 +921,9 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
                               add_default_protocol)
         return self
 
-    def __init__(self, pspec, clifford_compilations, depths, circuits_per_depth, qubit_labels=None,
-                 sampler='Qelimination', samplerargs=(),
+    def __init__(self, pspec, depths, circuits_per_depth, qubit_labels=None, sampler='Qelimination', samplerargs=(),
                  localclifford=True, paulirandomize=True, descriptor='A mirror RB experiment',
-                 add_default_protocol=False, seed=None, num_processes=1, verbosity=1):
+                 add_default_protocol=False, seed=1234, num_processes=1, verbosity=1):
         """
         Generates a "mirror randomized benchmarking" (MRB) experiment, for the case of Clifford gates and with
         the option of Pauli randomization and local Clifford twirling. To implement mirror RB it is necessary
@@ -948,8 +934,8 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
 
         Parameters
         ----------
-        pspec : QubitProcessorSpec
-           The QubitProcessorSpec for the device that the experiment is being generated for. The `pspec` is always
+        pspec : ProcessorSpec
+           The ProcessorSpec for the device that the experiment is being generated for. The `pspec` is always
            handed to the sampler, as the first argument of the sampler function.
 
         depths : list of ints
@@ -978,7 +964,7 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
 
         qubit_labels : list, optional
             If not None, a list of the qubits that the RB circuit is to be sampled for. This should
-            be all or a subset of the qubits in the device specified by the QubitProcessorSpec `pspec`.
+            be all or a subset of the qubits in the device specified by the ProcessorSpec `pspec`.
             If None, it is assumed that the RB circuit should be over all the qubits. Note that the
             ordering of this list is the order of the ``wires'' in the returned circuit, but is otherwise
             irrelevant.
@@ -990,9 +976,9 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
             corresponds to sampling according to rb.sampler.circuit_layer_of_oneQgates [which is not
             a valid option for n-qubit MRB -- it results in sim. 1-qubit MRB -- but it is not explicitly
             forbidden by this function]. If `sampler` is a function, it should be a function that takes
-            as the first argument a QubitProcessorSpec, and returns a random circuit layer as a list of gate
+            as the first argument a ProcessorSpec, and returns a random circuit layer as a list of gate
             Label objects. Note that the default 'Qelimination' is not necessarily the most useful
-            in-built sampler, but it is the only sampler that requires no parameters beyond the QubitProcessorSpec
+            in-built sampler, but it is the only sampler that requires no parameters beyond the ProcessorSpec
             *and* works for arbitrary connectivity devices. See the docstrings for each of these samplers
             for more information.
 
@@ -1015,8 +1001,7 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
         seed : int, optional
             A seed to initialize the random number generator used for creating random clifford
             circuits. The seed is incremented for each circuit sampled to ensure deterministic
-            sampling even when using multiprocessing for parallelization. If None, a random
-            integer between 1 and 1e6 is selected.
+            sampling even when using multiprocessing for parallelization.
 
         descriptor : str, optional
             A string describing the generated experiment. Stored in the returned dictionary.
@@ -1039,18 +1024,15 @@ class MirrorRBDesign(_vb.BenchmarkingDesign):
         circuit_lists = []
         ideal_outs = []
 
-        if seed is None:
-            self.seed = _np.random.randint(1, 1e6)  # Pick a random seed
-        else:
-            self.seed = seed
+        self.seed = seed
 
         for lnum, l in enumerate(depths):
-            lseed = self.seed + lnum * circuits_per_depth
+            lseed = seed + lnum * circuits_per_depth
             if verbosity > 0:
                 print('- Sampling {} circuits at MRB length {} ({} of {} depths) with seed {}'.format(
                     circuits_per_depth, l, lnum + 1, len(depths), lseed))
 
-            args_list = [(pspec, clifford_compilations['absolute'], l)] * circuits_per_depth
+            args_list = [(pspec, l)] * circuits_per_depth
             kwargs_list = [dict(qubit_labels=qubit_labels, sampler=sampler,
                                 samplerargs=samplerargs, localclifford=localclifford,
                                 paulirandomize=paulirandomize,

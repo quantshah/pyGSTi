@@ -324,8 +324,7 @@ try:
             "pygsti.evotypes.densitymx.opreps",
             sources=[
                 "pygsti/evotypes/densitymx/opreps.pyx",
-                "pygsti/evotypes/densitymx/opcreps.cpp",
-                "pygsti/evotypes/densitymx/statecreps.cpp"
+                "pygsti/evotypes/densitymx/opcreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -336,9 +335,7 @@ try:
             "pygsti.evotypes.densitymx.effectreps",
             sources=[
                 "pygsti/evotypes/densitymx/effectreps.pyx",
-                "pygsti/evotypes/densitymx/effectcreps.cpp",
-                "pygsti/evotypes/densitymx/statecreps.cpp",
-                "pygsti/evotypes/densitymx/opcreps.cpp"
+                "pygsti/evotypes/densitymx/effectcreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -360,8 +357,7 @@ try:
             "pygsti.evotypes.statevec.opreps",
             sources=[
                 "pygsti/evotypes/statevec/opreps.pyx",
-                "pygsti/evotypes/statevec/opcreps.cpp",
-                "pygsti/evotypes/statevec/statecreps.cpp"
+                "pygsti/evotypes/statevec/opcreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -372,9 +368,7 @@ try:
             "pygsti.evotypes.statevec.effectreps",
             sources=[
                 "pygsti/evotypes/statevec/effectreps.pyx",
-                "pygsti/evotypes/statevec/effectcreps.cpp",
-                "pygsti/evotypes/statevec/statecreps.cpp",
-                "pygsti/evotypes/statevec/opcreps.cpp"
+                "pygsti/evotypes/statevec/effectcreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -385,10 +379,7 @@ try:
             "pygsti.evotypes.statevec.termreps",
             sources=[
                 "pygsti/evotypes/statevec/termreps.pyx",
-                "pygsti/evotypes/statevec/termcreps.cpp",
-                "pygsti/evotypes/statevec/statecreps.cpp",
-                "pygsti/evotypes/statevec/opcreps.cpp",
-                "pygsti/evotypes/statevec/effectcreps.cpp"
+                "pygsti/evotypes/statevec/termcreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -410,8 +401,7 @@ try:
             "pygsti.evotypes.stabilizer.opreps",
             sources=[
                 "pygsti/evotypes/stabilizer/opreps.pyx",
-                "pygsti/evotypes/stabilizer/opcreps.cpp",
-                "pygsti/evotypes/stabilizer/statecreps.cpp"
+                "pygsti/evotypes/stabilizer/opcreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -422,9 +412,7 @@ try:
             "pygsti.evotypes.stabilizer.effectreps",
             sources=[
                 "pygsti/evotypes/stabilizer/effectreps.pyx",
-                "pygsti/evotypes/stabilizer/effectcreps.cpp",
-                "pygsti/evotypes/stabilizer/statecreps.cpp",
-                "pygsti/evotypes/stabilizer/opcreps.cpp"
+                "pygsti/evotypes/stabilizer/effectcreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -435,10 +423,7 @@ try:
             "pygsti.evotypes.stabilizer.termreps",
             sources=[
                 "pygsti/evotypes/stabilizer/termreps.pyx",
-                "pygsti/evotypes/stabilizer/termcreps.cpp",
-                "pygsti/evotypes/stabilizer/statecreps.cpp",
-                "pygsti/evotypes/stabilizer/opcreps.cpp",
-                "pygsti/evotypes/stabilizer/effectcreps.cpp"
+                "pygsti/evotypes/stabilizer/termcreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -449,7 +434,6 @@ try:
             "pygsti.forwardsims.mapforwardsim_calc_densitymx",
             sources=[
                 "pygsti/forwardsims/mapforwardsim_calc_densitymx.pyx",
-                "pygsti/evotypes/densitymx/statecreps.cpp",
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -460,8 +444,6 @@ try:
             "pygsti.forwardsims.termforwardsim_calc_statevec",
             sources=[
                 "pygsti/forwardsims/termforwardsim_calc_statevec.pyx",
-                "pygsti/evotypes/statevec/statecreps.cpp",
-                "pygsti/evotypes/basecreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",
@@ -472,8 +454,6 @@ try:
             "pygsti.forwardsims.termforwardsim_calc_stabilizer",
             sources=[
                 "pygsti/forwardsims/termforwardsim_calc_stabilizer.pyx",
-                "pygsti/evotypes/stabilizer/statecreps.cpp",
-                "pygsti/evotypes/basecreps.cpp"
             ],
             include_dirs=['.', 'pygsti/evotypes', np.get_include()],
             language="c++",

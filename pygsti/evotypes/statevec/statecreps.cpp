@@ -12,13 +12,12 @@
 //#define DEBUG(x) x
 #define DEBUG(x) 
 
-namespace CReps_statevec {
+namespace CReps {
 
   /****************************************************************************\
   |* StateCRep                                                              *|
   \****************************************************************************/
   StateCRep::StateCRep(INT dim) {
-    //DEBUG std::cout << "StateCRep initialized w/dim = " << dim << std::endl;
     _dataptr = new dcomplex[dim];
     for(INT i=0; i<dim; i++) _dataptr[i] = 0;
     _dim = dim;

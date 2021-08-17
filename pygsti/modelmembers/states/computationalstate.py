@@ -55,7 +55,7 @@ class ComputationalBasisState(_State):
     """
 
     @classmethod
-    def from_state_vector(cls, vec, basis='pp', evotype='default', state_space=None):
+    def from_dense_vec(cls, vec, basis='pp', evotype='default', state_space=None):
         """
         Create a new ComputationalBasisState from a dense vector.
 
@@ -80,20 +80,25 @@ class ComputationalBasisState(_State):
         -------
         ComputationalBasisState
         """
-        nqubits = int(round(_np.log2(len(vec)) / 2))
-        v0 = 1.0 / _np.sqrt(2) * _np.array((1, 0, 0, 1), 'd')  # '0' qubit state as Pauli dmvec
-        v1 = 1.0 / _np.sqrt(2) * _np.array((1, 0, 0, -1), 'd')  # '1' qubit state as Pauli dmvec
-        v = (v0, v1)
+        if evotype in ('stabilizer', 'statevec'):
+            nqubits = int(round(_np.log2(len(vec))))
+            v0 = _np.array((1, 0), complex)  # '0' qubit state as complex state vec
+            v1 = _np.array((0, 1), complex)  # '1' qubit state as complex state vec
+        else:
+            nqubits = int(round(_np.log2(len(vec)) / 2))
+            v0 = 1.0 / _np.sqrt(2) * _np.array((1, 0, 0, 1), 'd')  # '0' qubit state as Pauli dmvec
+            v1 = 1.0 / _np.sqrt(2) * _np.array((1, 0, 0, -1), 'd')  # '1' qubit state as Pauli dmvec
 
+        v = (v0, v1)
         for zvals in _itertools.product(*([(0, 1)] * nqubits)):
             testvec = _functools.reduce(_np.kron, [v[i] for i in zvals])
-            if _np.allclose(testvec, vec.flatten()):
+            if _np.allclose(testvec, vec.flat):
                 return cls(zvals, basis, evotype, state_space)
         raise ValueError(("Given `vec` is not a z-basis product state - "
                           "cannot construct ComputationalBasisState"))
 
     @classmethod
-    def from_pure_vector(cls, purevec, basis='pp', evotype="default", state_space=None):
+    def from_dense_purevec(cls, purevec, basis='pp', evotype="default", state_space=None):
         """
         Create a new ComputationalBasisState from a pure-state vector.
 
@@ -127,7 +132,7 @@ class ComputationalBasisState(_State):
         v = (_np.array([1, 0], 'd'), _np.array([0, 1], 'd'))  # (v0,v1)
         for zvals in _itertools.product(*([(0, 1)] * nqubits)):
             testvec = _functools.reduce(_np.kron, [v[i] for i in zvals])
-            if _np.allclose(testvec, purevec.flatten()):
+            if _np.allclose(testvec, purevec.flat):
                 return cls(zvals, basis, evotype, state_space)
         raise ValueError(("Given `purevec` must be a z-basis product state - "
                           "cannot construct ComputationalBasisState"))
@@ -189,17 +194,17 @@ class ComputationalBasisState(_State):
         if _fastcalc is None:  # do it the slow way using numpy
             return _functools.reduce(_np.kron, [v[i] for i in self._zvals])
         else:
-            typ = v0.dtype
+            typ = 'd' if self._evotype == "densitymx" else complex
             fast_kron_array = _np.ascontiguousarray(
                 _np.empty((len(self._zvals), factor_dim), typ))
             fast_kron_factordims = _np.ascontiguousarray(_np.array([factor_dim] * len(self._zvals), _np.int64))
             for i, zi in enumerate(self._zvals):
                 fast_kron_array[i, :] = v[zi]
             ret = _np.ascontiguousarray(_np.empty(factor_dim**len(self._zvals), typ))
-            if fast_kron_array.dtype == _np.dtype(complex):
-                _fastcalc.fast_kron_complex(ret, fast_kron_array, fast_kron_factordims)
-            else:
+            if self._evotype == "densitymx":
                 _fastcalc.fast_kron(ret, fast_kron_array, fast_kron_factordims)
+            else:
+                _fastcalc.fast_kron_complex(ret, fast_kron_array, fast_kron_factordims)
             return ret
 
     def taylor_order_terms(self, order, max_polynomial_vars=100, return_coeff_polys=False):
@@ -364,7 +369,7 @@ class ComputationalBasisState(_State):
 #        v = (_np.array([1, 0], 'd'), _np.array([0, 1], 'd'))  # (v0,v1)
 #        for zvals in _itertools.product(*([(0, 1)] * nqubits)):
 #            testvec = _functools.reduce(_np.kron, [v[i] for i in zvals])
-#            if _np.allclose(testvec, purevec.flatten()):
+#            if _np.allclose(testvec, purevec.flat):
 #                return cls(nqubits, zvals)
 #        raise ValueError(("Given `purevec` must be a z-basis product state - "
 #                          "cannot construct ComputationalBasisState"))

@@ -15,7 +15,7 @@ import numpy as _np
 from . import pauliobjs as _pobjs
 from ... import tools as _tools
 from ...modelmembers import operations as _op
-from ...circuits import cloudcircuitconstruction as _nqn
+from ...models import nqnoiseconstruction as _nqn
 
 
 # maybe need to restructure in future - "tools" usually doesn't import "objects"
@@ -23,7 +23,7 @@ from ...circuits import cloudcircuitconstruction as _nqn
 
 def alloutcomes(prep, meas, maxweight):
     """
-    Lists every "error bit string" that co1uld be caused by an error of weight
+    Lists every "error bit string" that could be caused by an error of weight
     up to `maxweight` when performing prep & meas (must be in same basis, but may
     have different signs).
 
@@ -207,31 +207,19 @@ def set_idle_errors(nqubits, model, errdict, rand_default=None,
     v = model.to_vector()
     #assumes Implicit model w/'globalIdle' as a composed gate...
     # each factor applies to some set of the qubits (of size 1 to the max-error-weight)
-    global_idle_lbl = model.processor_spec.global_idle_layer_label
-    global_idle = model.circuit_layer_operator(global_idle_lbl, typ='op')
-    factorops = global_idle.factorops if isinstance(global_idle, _op.ComposedOp) else (global_idle,)
-    for i, factor in enumerate(factorops):
+    for i, factor in enumerate(model.operation_blks['layers']['globalIdle'].factorops):
         #print("Factor %d: target = %s, gpindices=%s" % (i,str(factor.targetLabels),str(factor.gpindices)))
-        if isinstance(factor, _op.EmbeddedOp):
-            experrgen_op = factor.embedded_op
-            targetLabels = factor.target_labels
-        else:
-            experrgen_op = factor
-            targetLabels = model.state_space.qubit_labels
-
-        assert(isinstance(experrgen_op, _op.ExpErrorgenOp)), \
-            "Expected idle op to be a composition of possibly embedded exp(errorgen) gates!"
-
+        assert(isinstance(factor, _op.EmbeddedOp)), "Expected Gi to be a composition of embedded gates!"
         sub_v = v[factor.gpindices]
-        bsH = experrgen_op.errorgen.ham_basis_size
-        bsO = experrgen_op.errorgen.other_basis_size
+        bsH = factor.embedded_op.errorgen.ham_basis_size
+        bsO = factor.embedded_op.errorgen.other_basis_size
         if hamiltonian: hamiltonian_sub_v = sub_v[0:bsH - 1]  # -1s b/c bsH, bsO include identity in basis
         if stochastic: stochastic_sub_v = sub_v[bsH - 1:bsH - 1 + bsO - 1]
         if affine: affine_sub_v = sub_v[bsH - 1 + bsO - 1:bsH - 1 + 2 * (bsO - 1)]
 
-        for k, tup in enumerate(nontrivial_paulis(len(targetLabels))):
+        for k, tup in enumerate(nontrivial_paulis(len(factor.targetLabels))):
             lst = ['I'] * nqubits
-            for ii, i in enumerate(targetLabels):
+            for ii, i in enumerate(factor.targetLabels):
                 indx = i if isinstance(i, int) else int(i[1:])  # i is something like "Q0" so int(i[1:]) extracts the 0
                 lst[indx] = tup[ii]
             label = "".join(lst)
@@ -311,8 +299,7 @@ def get_idle_errors(nqubits, model, hamiltonian=True, stochastic=True, affine=Tr
     aff_rates = {}
     v = model.to_vector()
     #assumes Implicit model w/'globalIdle' as a composed gate...
-    idleop = model.circuit_layer_operator(model.processor_spec.global_idle_layer_label, 'op')
-    for i, factor in enumerate(idleop.factorops):
+    for i, factor in enumerate(model.operation_blks['layers']['globalIdle'].factorops):
         # each factor applies to some set of the qubits (of size 1 to the max-error-weight)
 
         #print("Factor %d: target = %s, gpindices=%s" % (i,str(factor.targetLabels),str(factor.gpindices)))
@@ -390,24 +377,12 @@ def predicted_intrinsic_rates(nqubits, maxweight, model,
         aff_intrinsic_rates = _np.zeros(len(error_labels), 'd')
     else: aff_intrinsic_rates = None
 
-    # assumes this is a composed op of embedded lindblad ops
-    idleop = model.circuit_layer_operator(model.processor_spec.global_idle_layer_label, 'op')
-    factorops = idleop.factorops if isinstance(idleop, _op.ComposedOp) else (idleop,)
-    for i, factor in enumerate(factorops):
+    idleop = model.operation_blks['layers']['globalIdle']  # assumes this is a composed op of embedded lindblad ops
+    for i, factor in enumerate(idleop.factorops):
         #print("Factor %d: target = %s, gpindices=%s" % (i,str(factor.targetLabels),str(factor.gpindices)))
-
-        if isinstance(factor, _op.EmbeddedOp):
-            experrgen_op = factor.embedded_op
-            targetLabels = factor.target_labels
-        else:
-            experrgen_op = factor
-            targetLabels = model.state_space.qubit_labels
-
-        assert(isinstance(experrgen_op, _op.ExpErrorgenOp)), \
-            "Expected idle op to be a composition of possibly embedded exp(errorgen) gates!"
-
-        errgen_coeffs = experrgen_op.errorgen_coefficients()
-        nTargetQubits = len(targetLabels)
+        assert(isinstance(factor, _op.EmbeddedOp)), "Expected global idle to be a composition of embedded gates!"
+        errgen_coeffs = factor.embedded_op.errorgen_coefficients()
+        nTargetQubits = len(factor.targetLabels)
 
         #OLD - before get_errgen_coeffs
         #sub_v = v[factor.gpindices]
@@ -417,9 +392,9 @@ def predicted_intrinsic_rates(nqubits, maxweight, model,
         #if stochastic: stochastic_sub_v = sub_v[bsH - 1:bsH - 1 + bsO - 1]
         #if affine: affine_sub_v = sub_v[bsH - 1 + bsO - 1:bsH - 1 + 2 * (bsO - 1)]
 
-        for k, tup in enumerate(nontrivial_paulis(len(targetLabels))):
+        for k, tup in enumerate(nontrivial_paulis(len(factor.targetLabels))):
             lst = ['I'] * nqubits
-            for ii, i in enumerate(targetLabels):
+            for ii, i in enumerate(factor.targetLabels):
                 indx = i if isinstance(i, int) else int(i[1:])  # i is something like "Q0" so int(i[1:]) extracts the 0
                 lst[indx] = tup[ii]
             label = "".join(lst)  # label on *all* qubits (with 'I's)

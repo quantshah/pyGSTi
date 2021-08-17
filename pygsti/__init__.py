@@ -18,7 +18,6 @@ from . import forwardsims
 from . import processors
 from . import protocols
 from . import report as rpt
-from . import serialization
 
 # Import the most important/useful routines of each module/sub-package
 # into the package namespace
